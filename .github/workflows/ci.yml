@@ -70,6 +70,11 @@ jobs:
         with:
           terraform_version: 1.5
 
+      - name: Setup Go modules
+        run: |
+          cd tests
+          go mod tidy
+
       - name: Run Terratest
         run: |
           cd tests
