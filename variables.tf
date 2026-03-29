@@ -33,6 +33,12 @@ variable "owner_name" {
   type        = string
 }
 
+variable "key_name" {
+  description = "Name of the EC2 key pair for SSH access"
+  type        = string
+  default     = null
+}
+
 variable "instance_type" {
   description = "EC2 instance type for the NAT Instance (e.g., t3.micro, t2.micro)"
   type        = string

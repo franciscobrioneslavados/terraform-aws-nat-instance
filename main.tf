@@ -88,6 +88,7 @@ resource "aws_instance" "nat_instance" {
   vpc_security_group_ids      = [aws_security_group.nat_instance.id]
   associate_public_ip_address = true
   source_dest_check           = false
+  key_name                    = var.key_name
 
   user_data = <<-EOT
     #!/bin/bash
