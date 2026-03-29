@@ -9,7 +9,6 @@ A Terraform module to deploy a **NAT Instance** in AWS VPC, configured to route 
 - Elastic IP association
 - Security Group with configurable SSH access
 - Support for multiple Route Tables
-- Optional existing key pair or auto-generated
 - Terraform Registry compatible
 
 ## Architecture
@@ -83,18 +82,6 @@ module "nat_instance" {
 }
 ```
 
-### With Existing Key Pair
-
-```hcl
-module "nat_instance" {
-  source = "franciscobrioneslavados/nat-instance/aws"
-
-  # ... other variables ...
-
-  key_name = "my-existing-key"
-}
-```
-
 ## Requirements
 
 | Name | Version |
@@ -116,7 +103,6 @@ module "nat_instance" {
 | instance_type | EC2 instance type | `string` | `t3.micro` | no |
 | ssh_allowed_cidrs | CIDR blocks for SSH access (empty disables) | `list(string)` | `[]` | no |
 | ami_id | Custom AMI ID (null = Amazon Linux 2) | `string` | `null` | no |
-| key_name | Existing key pair name (null = auto-generate) | `string` | `null` | no |
 | managed_by | ManagedBy tag value | `string` | `Terraform` | no |
 
 ## Outputs
@@ -129,14 +115,10 @@ module "nat_instance" {
 | nat_instance_private_ip | Private IP of the NAT Instance |
 | nat_network_interface_id | Primary network interface ID |
 | nat_security_group_id | Security Group ID |
-| key_pair_name | Key pair name used |
-| private_key_file | Local path to private key (if auto-generated) |
-| ssh_command | SSH command to connect to NAT Instance |
-| chmod_command | Command to set key permissions |
 
 ## Testing / Validation
 
-1. Connect to the NAT Instance:
+1. Connect to the NAT Instance using your key pair:
    ```bash
    ssh -i your-key.pem ec2-user@<NAT_PUBLIC_IP>
    ```
