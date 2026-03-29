@@ -94,12 +94,12 @@ resource "aws_instance" "nat_instance" {
     #!/bin/bash
     set -e
 
-    dnf update -y
+    yum update -y
 
     echo 'net.ipv4.ip_forward = 1' | tee -a /etc/sysctl.conf
     sysctl -p
 
-    dnf install -y iptables-services
+    yum install -y iptables-services
 
     iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
     iptables -A FORWARD -i eth0 -o eth0 -j ACCEPT
@@ -109,7 +109,7 @@ resource "aws_instance" "nat_instance" {
     systemctl enable iptables
     systemctl start iptables
 
-    dnf install -y tcpdump curl wget
+    yum install -y tcpdump curl wget
 
     echo "NAT Instance configured successfully"
   EOT
