@@ -156,6 +156,32 @@ module "nat_instance" {
 - This module does not create the Internet Gateway or public Route Tables
 - For high availability, consider deploying NAT Instances in multiple AZs
 
+## Versioning
+
+This module uses [GitHub Releases](https://github.com/franciscobrioneslavados/terraform-aws-nat-instance/releases) for versioning.
+
+### Using a Specific Version
+
+```hcl
+module "nat_instance" {
+  source = "git::https://github.com/franciscobrioneslavados/terraform-aws-nat-instance.git//.?ref=v1.2.2"
+
+  # ... variables
+}
+```
+
+### Using Latest (main branch)
+
+```hcl
+module "nat_instance" {
+  source = "git::https://github.com/franciscobrioneslavados/terraform-aws-nat-instance.git//.?ref=main"
+
+  # ... variables
+}
+```
+
+**Note**: Using `main` branch may include breaking changes. Recommended for development only.
+
 ## References
 
 - [Terraform aws_instance](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/instance)
