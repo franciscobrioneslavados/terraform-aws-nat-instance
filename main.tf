@@ -83,28 +83,7 @@ resource "aws_security_group" "nat_instance" {
   })
 }
 
-resource "tls_private_key" "key_pair" {
-  count     = var.key_name != null ? 0 : 1
-  algorithm = "RSA"
-  rsa_bits  = 4096
-}
 
-resource "aws_key_pair" "key_pair" {
-  count      = var.key_name != null ? 0 : 1
-  key_name   = "${var.environment}-${var.project_name}-key"
-  public_key = tls_private_key.key_pair[0].public_key_openssh
-
-  tags = merge(local.global_tags, {
-    Name = "${var.project_name}-keypair"
-  })
-}
-
-resource "local_file" "private_key" {
-  count           = var.key_name != null ? 0 : 1
-  content         = tls_private_key.key_pair[0].private_key_pem
-  filename        = "${path.module}/${var.environment}-${var.project_name}-key.pem"
-  file_permission = "0400"
-}
 
 resource "aws_instance" "nat_instance" {
   ami                         = var.ami_id != null ? var.ami_id : data.aws_ami.amazon_linux_2[0].id
@@ -113,8 +92,8 @@ resource "aws_instance" "nat_instance" {
   vpc_security_group_ids      = [aws_security_group.nat_instance.id]
   associate_public_ip_address = true
   source_dest_check           = false
-  key_name                    = var.key_name != null ? var.key_name : aws_key_pair.key_pair[0].key_name
-  user_data                   = <<-EOT
+
+  user_data = <<-EOT
     #!/bin/bash
     set -e
 
@@ -147,7 +126,6 @@ resource "aws_instance" "nat_instance" {
     Name = "ec2-${var.environment}-${var.project_name}"
   })
 
-  depends_on = [aws_key_pair.key_pair]
 }
 
 resource "aws_eip" "nat" {

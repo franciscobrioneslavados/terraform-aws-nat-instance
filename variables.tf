@@ -51,12 +51,6 @@ variable "ami_id" {
   default     = null
 }
 
-variable "key_name" {
-  description = "Existing key pair name to use. Null generates a new key pair automatically."
-  type        = string
-  default     = null
-}
-
 variable "managed_by" {
   description = "ManagedBy tag value"
   type        = string
