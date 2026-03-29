@@ -7,10 +7,6 @@ locals {
   }
 }
 
-data "aws_availability_zones" "available" {
-  state = "available"
-}
-
 data "aws_ami" "amazon_linux_2" {
   count       = var.ami_id != null ? 0 : 1
   most_recent = true
