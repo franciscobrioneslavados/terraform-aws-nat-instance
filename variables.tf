@@ -62,3 +62,73 @@ variable "managed_by" {
   type        = string
   default     = "Terraform"
 }
+
+variable "os_type" {
+  description = "Operating System type (amazon-linux-2 or ubuntu)"
+  type        = string
+  default     = "amazon-linux-2"
+  validation {
+    condition     = contains(["amazon-linux-2", "ubuntu"], var.os_type)
+    error_message = "os_type must be either 'amazon-linux-2' or 'ubuntu'."
+  }
+}
+
+variable "user_data_al2" {
+  description = "User data for Amazon Linux 2 NAT Instance"
+  type        = string
+  default     = <<-EOT
+    #!/bin/bash
+    set -e
+
+    # Usar yum en lugar de dnf para máxima compatibilidad
+    yum update -y
+
+    echo 'net.ipv4.ip_forward = 1' | tee -a /etc/sysctl.conf
+    sysctl -p
+
+    yum install -y iptables-services
+
+    iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+    iptables -A FORWARD -i eth0 -o eth0 -j ACCEPT
+
+    # Guardar reglas para persistencia
+    iptables-save > /etc/sysconfig/iptables
+
+    systemctl enable iptables
+    systemctl start iptables
+
+    yum install -y tcpdump curl wget
+    
+    echo "NAT Instance configured successfully"
+  EOT
+}
+
+variable "user_data_ubuntu" {
+  description = "User data for Ubuntu NAT Instance"
+  type        = string
+  default     = <<-EOT
+     #!/bin/bash
+     set -e
+   
+     # Actualizar repositorios
+     apt-get update -y
+     
+     # Habilitar forwarding en el kernel
+     echo 'net.ipv4.ip_forward = 1' | tee -a /etc/sysctl.conf
+     sysctl -p
+   
+     # Instalar iptables-persistent sin que pida confirmación manual
+     # Esto es vital para Ubuntu durante el boot
+     export DEBIAN_FRONTEND=noninteractive
+     apt-get install -y iptables-persistent tcpdump curl wget
+   
+     # Configurar reglas de NAT
+     iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+     iptables -A FORWARD -i eth0 -o eth0 -j ACCEPT
+   
+     # Guardar las reglas para que persistan tras reinicios
+     netfilter-persistent save
+   
+     echo "NAT Instance (Ubuntu) configured successfully"
+   EOT
+}

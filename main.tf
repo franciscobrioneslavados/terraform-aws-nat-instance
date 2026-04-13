@@ -8,13 +8,29 @@ locals {
 }
 
 data "aws_ami" "amazon_linux_2" {
-  count       = var.ami_id != null ? 0 : 1
+  count       = (var.ami_id == null && var.os_type == "amazon-linux-2") ? 1 : 0
   most_recent = true
   owners      = ["amazon"]
 
   filter {
     name   = "name"
     values = ["amzn2-ami-hvm-*-x86_64-ebs"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+}
+
+data "aws_ami" "ubuntu" {
+  count       = (var.ami_id == null && var.os_type == "ubuntu") ? 1 : 0
+  most_recent = true
+  owners      = ["099720109477"] # Canonical
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-*"]
   }
 
   filter {
@@ -82,7 +98,7 @@ resource "aws_security_group" "nat_instance" {
 
 
 resource "aws_instance" "nat_instance" {
-  ami                         = var.ami_id != null ? var.ami_id : data.aws_ami.amazon_linux_2[0].id
+  ami                         = var.ami_id != null ? var.ami_id : (var.os_type == "ubuntu" ? data.aws_ami.ubuntu[0].id : data.aws_ami.amazon_linux_2[0].id)
   instance_type               = var.instance_type
   subnet_id                   = var.public_subnet_ids[0]
   vpc_security_group_ids      = [aws_security_group.nat_instance.id]
@@ -90,29 +106,8 @@ resource "aws_instance" "nat_instance" {
   source_dest_check           = false
   key_name                    = var.key_name
 
-  user_data = <<-EOT
-    #!/bin/bash
-    set -e
+  user_data = var.os_type == "ubuntu" ? var.user_data_ubuntu : var.user_data_al2
 
-    yum update -y
-
-    echo 'net.ipv4.ip_forward = 1' | tee -a /etc/sysctl.conf
-    sysctl -p
-
-    yum install -y iptables-services
-
-    iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
-    iptables -A FORWARD -i eth0 -o eth0 -j ACCEPT
-
-    iptables-save > /etc/sysconfig/iptables
-
-    systemctl enable iptables
-    systemctl start iptables
-
-    yum install -y tcpdump curl wget
-
-    echo "NAT Instance configured successfully"
-  EOT
 
   root_block_device {
     volume_type           = "gp3"

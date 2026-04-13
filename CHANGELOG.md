@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-04-13
+
+### Added
+- Multi-OS support: Choose between Amazon Linux 2 and Ubuntu 20.04 using `os_type` variable.
+- Automatic AMI detection for both supported OS types.
+- Specialized `user_data` scripts for Ubuntu (using `apt` and `netfilter-persistent`) and AL2 (using `yum` and `iptables-services`).
+
+### Fixed
+- Improved heredoc syntax in `variables.tf` to avoid unterminated string errors.
+- Consolidated duplicate `user_data` attributes in `aws_instance` resource.
+
 ## [1.1.0] - 2026-03-28
 
 ### Added
