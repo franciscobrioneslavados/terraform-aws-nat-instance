@@ -14,7 +14,33 @@ data "aws_ami" "amazon_linux_2" {
 
   filter {
     name   = "name"
-    values = ["amzn2-ami-hvm-*-x86_64-ebs"]
+    values = [var.cpu_architecture == "arm64" ? "amzn2-ami-hvm-*-arm64-gp2" : "amzn2-ami-hvm-*-x86_64-ebs"]
+  }
+
+  filter {
+    name   = "architecture"
+    values = [var.cpu_architecture]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+}
+
+data "aws_ami" "al2023" {
+  count       = (var.ami_id == null && var.os_type == "al2023") ? 1 : 0
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = [var.cpu_architecture == "arm64" ? "al2023-ami-kernel-*-arm64" : "al2023-ami-kernel-*-x86_64"]
+  }
+
+  filter {
+    name   = "architecture"
+    values = [var.cpu_architecture]
   }
 
   filter {
@@ -30,7 +56,12 @@ data "aws_ami" "ubuntu" {
 
   filter {
     name   = "name"
-    values = ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-*"]
+    values = [var.cpu_architecture == "arm64" ? "ubuntu/images/hvm-ssd/ubuntu-focal-20.04-arm64-server-*" : "ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-*"]
+  }
+
+  filter {
+    name   = "architecture"
+    values = [var.cpu_architecture]
   }
 
   filter {
@@ -82,6 +113,14 @@ resource "aws_security_group" "nat_instance" {
     description = "UDP from private subnets"
   }
 
+  ingress {
+    from_port   = -1
+    to_port     = -1
+    protocol    = "icmp"
+    cidr_blocks = var.private_subnet_cidrs
+    description = "ICMP from private subnets (Ping and PMTUD)"
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -98,7 +137,7 @@ resource "aws_security_group" "nat_instance" {
 
 
 resource "aws_instance" "nat_instance" {
-  ami                         = var.ami_id != null ? var.ami_id : (var.os_type == "ubuntu" ? data.aws_ami.ubuntu[0].id : data.aws_ami.amazon_linux_2[0].id)
+  ami                         = coalesce(var.ami_id, var.os_type == "ubuntu" ? one(data.aws_ami.ubuntu[*].id) : (var.os_type == "al2023" ? one(data.aws_ami.al2023[*].id) : one(data.aws_ami.amazon_linux_2[*].id)))
   instance_type               = var.instance_type
   subnet_id                   = var.public_subnet_ids[0]
   vpc_security_group_ids      = [aws_security_group.nat_instance.id]

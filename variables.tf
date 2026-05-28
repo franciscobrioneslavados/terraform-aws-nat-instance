@@ -64,12 +64,22 @@ variable "managed_by" {
 }
 
 variable "os_type" {
-  description = "Operating System type (amazon-linux-2 or ubuntu)"
+  description = "Operating System type (amazon-linux-2, al2023, or ubuntu)"
   type        = string
   default     = "amazon-linux-2"
   validation {
-    condition     = contains(["amazon-linux-2", "ubuntu"], var.os_type)
-    error_message = "os_type must be either 'amazon-linux-2' or 'ubuntu'."
+    condition     = contains(["amazon-linux-2", "al2023", "ubuntu"], var.os_type)
+    error_message = "os_type must be either 'amazon-linux-2', 'al2023', or 'ubuntu'."
+  }
+}
+
+variable "cpu_architecture" {
+  description = "CPU Architecture for the NAT Instance (x86_64 or arm64). Must match your chosen instance_type."
+  type        = string
+  default     = "x86_64"
+  validation {
+    condition     = contains(["x86_64", "arm64"], var.cpu_architecture)
+    error_message = "cpu_architecture must be 'x86_64' or 'arm64'."
   }
 }
 
@@ -80,7 +90,6 @@ variable "user_data_al2" {
     #!/bin/bash
     set -e
 
-    # Usar yum en lugar de dnf para máxima compatibilidad
     yum update -y
 
     echo 'net.ipv4.ip_forward = 1' | tee -a /etc/sysctl.conf

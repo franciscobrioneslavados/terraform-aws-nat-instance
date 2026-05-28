@@ -148,6 +148,75 @@ module "nat_instance" {
    curl -s https://ifconfig.me  # Should show NAT's EIP
    ```
 
+## AWS Console Deployment (Manual Step-by-Step)
+
+If you need to deploy and configure this NAT Instance manually using the **AWS Web Console** instead of Terraform, follow these steps:
+
+### 1. Launch the EC2 Instance (NAT)
+1. Navigate to the **EC2 Dashboard** and click **Launch instance**.
+2. **Name & Tags:** Enter a name (e.g., `my-nat-instance`).
+3. **Application and OS Image:** Choose **Amazon Linux 2023** (or Amazon Linux 2 / Ubuntu).
+4. **Instance Type:** Select a cost-effective type, such as `t4g.nano` or `t3.micro`.
+5. **Key Pair:** Select your SSH key pair.
+6. **Network Settings:**
+   - Click **Edit**.
+   - **VPC:** Select your target VPC.
+   - **Subnet:** Select a **Public Subnet** (with an active Internet Gateway route).
+   - **Auto-assign public IP:** Select **Enable**.
+   - **Firewall (Security Groups):** Create a new Security Group with these rules:
+     - **Inbound Rule 1:** SSH (Port 22) allowed only from your IP (for management).
+     - **Inbound Rule 2:** All TCP (Ports 0 - 65535) allowed from your **Private Subnet CIDRs** (e.g., `10.0.1.0/24`).
+     - **Inbound Rule 3:** All UDP (Ports 0 - 65535) allowed from your **Private Subnet CIDRs**.
+     - **Inbound Rule 4:** ICMP (All) allowed from your **Private Subnet CIDRs** (essential for pinging and PMTUD).
+     - **Outbound Rule:** Allow All Traffic (`0.0.0.0/0`).
+7. Click **Launch instance**.
+
+### 2. Disable Source/Destination Check
+*By default, EC2 instances drop traffic that is not destined for their own IP. We must disable this check to allow routing.*
+1. Go to the **EC2 Instances** list.
+2. Select your new NAT Instance.
+3. Click **Actions** > **Networking** > **Change source/destination check**.
+4. Select **Stop** (which disables the check) and save.
+
+### 3. Allocate and Associate an Elastic IP (EIP)
+*An EIP ensures your NAT Instance maintains a persistent public IP.*
+1. In the left EC2 sidebar, go to **Elastic IPs** and click **Allocate Elastic IP address**. Click **Allocate**.
+2. Select the allocated EIP, click **Actions** > **Associate Elastic IP address**.
+3. Choose **Instance**, select your NAT Instance, and click **Associate**.
+
+### 4. Configure IP Forwarding & NAT Masquerading (via SSH)
+1. Connect to your instance via SSH:
+   ```bash
+   ssh -i your-key.pem ec2-user@<NAT_PUBLIC_IP>
+   ```
+2. Enable IPv4 forwarding in the Linux Kernel:
+   ```bash
+   echo "net.ipv4.ip_forward = 1" | sudo tee -a /etc/sysctl.conf
+   sudo sysctl -p
+   ```
+3. Install and enable the `iptables` persistence service:
+   ```bash
+   sudo yum install -y iptables-services
+   sudo systemctl enable iptables
+   sudo systemctl start iptables
+   ```
+4. Set up the NAT masquerading rule (this dynamically detects your primary network interface, such as `eth0` or `ens5`):
+   ```bash
+   PRIMARY_IFACE=$(ip route show | grep '^default' | awk '{print $5}')
+   sudo iptables -t nat -A POSTROUTING -o $PRIMARY_IFACE -j MASQUERADE
+   sudo iptables -A FORWARD -i $PRIMARY_IFACE -o $PRIMARY_IFACE -j ACCEPT
+   sudo service iptables save
+   ```
+
+### 5. Update the Route Table for Private Subnets
+1. Go to the **VPC Dashboard** > **Route Tables**.
+2. Select the Route Table associated with your **Private Subnets**.
+3. Click the **Routes** tab, then **Edit routes**.
+4. Click **Add route**:
+   - **Destination:** `0.0.0.0/0`
+   - **Target:** Select **Instance**, then choose your **NAT Instance**.
+5. Click **Save changes**. Your private subnet instances now have secure internet access!
+
 ## Notes
 
 - The NAT Instance must have **source_dest_check = false** (handled automatically)

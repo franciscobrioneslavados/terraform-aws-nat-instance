@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-05-28
+
+### Added
+- Multi-architecture support: added `cpu_architecture` variable to select between `x86_64` and `arm64` (Graviton) AMIs.
+- Amazon Linux 2023 support: added `al2023` to `os_type` to allow deploying using the latest AWS standard OS.
+- Inbound ICMP rule: added support for incoming ICMP traffic from private subnets in the Security Group to enable diagnostics (ping) and PMTUD.
+- Dynamic network interface detection: updated `user_data` scripts to dynamically detect the default gateway interface, preventing silent routing failures on modern Nitro/Graviton instances.
+- AWS Console Deployment manual guide in README.md.
+
+### Fixed
+- Fixed AMI indexing in `aws_instance` using `coalesce` and `one()` to prevent potential *index out of bounds* planning errors when providing custom AMI IDs.
+
 ## [1.3.0] - 2026-04-13
 
 ### Added
