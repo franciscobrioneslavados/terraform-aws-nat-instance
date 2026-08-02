@@ -6,8 +6,8 @@ A Terraform module to deploy a **NAT Instance** in AWS VPC, configured to route 
 
 - EC2 NAT Instance with Amazon Linux 2, Amazon Linux 2023 or Ubuntu (or custom AMI)
 - Automatic iptables NAT configuration
-- Security Group with configurable SSH access (disabled by default)
-- **Secure access via AWS Systems Manager (Session Manager) — no SSH required**
+- Security Group restricted to private subnet traffic
+- **Secure access via AWS Systems Manager (Session Manager)**
 - **IAM instance profile with `AmazonSSMManagedInstanceCore`**
 - Support for multiple Route Tables
 - Multi-architecture support (x86_64 and arm64/Graviton)
@@ -79,8 +79,6 @@ module "nat_instance" {
   environment   = "prod"
   owner_name    = "John Doe"
   instance_type = "t3.micro"
-
-  ssh_allowed_cidrs = ["your-ip/32"]
 }
 ```
 
@@ -103,8 +101,6 @@ module "nat_instance" {
 | environment | Environment name (dev, staging, prod) | `string` | - | yes |
 | owner_name | Owner name for tagging | `string` | - | yes |
 | instance_type | EC2 instance type | `string` | `t3.micro` | no |
-| ssh_allowed_cidrs | CIDR blocks for SSH access (empty disables) | `list(string)` | `[]` | no |
-| key_name | Existing EC2 key pair for SSH (optional) | `string` | `null` | no |
 | ami_id | Custom AMI ID (null = auto-detect) | `string` | `null` | no |
 | os_type | OS type: `amazon-linux-2`, `al2023` or `ubuntu` | `string` | `amazon-linux-2` | no |
 | cpu_architecture | `x86_64` or `arm64` (must match instance_type) | `string` | `x86_64` | no |
@@ -122,9 +118,9 @@ module "nat_instance" {
 | nat_security_group_id | Security Group ID |
 | ssm_connect_command | Ready-to-run SSM connection command |
 
-## Secure access without SSH: AWS Systems Manager
+## Secure access via AWS Systems Manager (Session Manager)
 
-The module attaches an **IAM instance profile** with `AmazonSSMManagedInstanceCore`, so you can connect to the instance **without opening port 22**. SSH is disabled by default (`ssh_allowed_cidrs = []`).
+The module attaches an **IAM instance profile** with `AmazonSSMManagedInstanceCore`, so you can connect to the instance **without opening any inbound ports**.
 
 ### Local prerequisites
 
@@ -156,9 +152,8 @@ aws ssm send-command \
 
 ## Testing / Validation
 
-1. Connect to the NAT Instance via SSM (recommended) or SSH:
+1. Connect to the NAT Instance via SSM:
    ```bash
-   # SSM (no SSH exposed)
    aws ssm start-session --target <NAT_INSTANCE_ID>
    ```
 
@@ -180,10 +175,7 @@ aws ssm send-command \
 
 5. Test from a private instance:
    ```bash
-   # From NAT Instance, connect to private instance
-   ssh ec2-user@<PRIVATE_IP>
-   
-   # From private instance
+   # From the private instance (connect to it via Session Manager if it has the agent)
    curl -s https://ifconfig.me  # Should show the NAT's public IP
    ```
 
@@ -196,17 +188,16 @@ If you need to deploy and configure this NAT Instance manually using the **AWS W
 2. **Name & Tags:** Enter a name (e.g., `my-nat-instance`).
 3. **Application and OS Image:** Choose **Amazon Linux 2023** (or Amazon Linux 2 / Ubuntu).
 4. **Instance Type:** Select a cost-effective type, such as `t4g.nano` or `t3.micro`.
-5. **Key Pair:** Select your SSH key pair.
+5. **Login credentials:** Choose *Proceed without a key pair* — access is via SSM.
 6. **Network Settings:**
    - Click **Edit**.
    - **VPC:** Select your target VPC.
    - **Subnet:** Select a **Public Subnet** (with an active Internet Gateway route).
    - **Auto-assign public IP:** Select **Enable**.
    - **Firewall (Security Groups):** Create a new Security Group with these rules:
-     - **Inbound Rule 1:** SSH (Port 22) allowed only from your IP (for management).
-     - **Inbound Rule 2:** All TCP (Ports 0 - 65535) allowed from your **Private Subnet CIDRs** (e.g., `10.0.1.0/24`).
-     - **Inbound Rule 3:** All UDP (Ports 0 - 65535) allowed from your **Private Subnet CIDRs**.
-     - **Inbound Rule 4:** ICMP (All) allowed from your **Private Subnet CIDRs** (essential for pinging and PMTUD).
+     - **Inbound Rule 1:** All TCP (Ports 0 - 65535) allowed from your **Private Subnet CIDRs** (e.g., `10.0.1.0/24`).
+     - **Inbound Rule 2:** All UDP (Ports 0 - 65535) allowed from your **Private Subnet CIDRs**.
+     - **Inbound Rule 3:** ICMP (All) allowed from your **Private Subnet CIDRs** (essential for pinging and PMTUD).
      - **Outbound Rule:** Allow All Traffic (`0.0.0.0/0`).
 7. Click **Launch instance**.
 
@@ -217,8 +208,8 @@ If you need to deploy and configure this NAT Instance manually using the **AWS W
 3. Click **Actions** > **Networking** > **Change source/destination check**.
 4. Select **Stop** (which disables the check) and save.
 
-### 3. (Optional) Attach an IAM role for SSM access
-*This is optional if you want SSH-free access. It lets you connect via AWS Systems Manager instead of opening port 22.*
+### 3. Attach an IAM role for SSM access
+*Recommended: lets you connect via AWS Systems Manager (Session Manager).*
 1. Go to **IAM** > **Roles** > **Create role**.
 2. Trusted entity: **AWS service** > **EC2**.
 3. Add the **AmazonSSMManagedInstanceCore** managed policy.
@@ -226,11 +217,11 @@ If you need to deploy and configure this NAT Instance manually using the **AWS W
 5. Back in EC2, select the instance > **Actions** > **Security** > **Modify IAM role**, and attach the new role.
 
 ### 4. Configure IP Forwarding & NAT Masquerading
-1. Connect to your instance. Preferred method — **Session Manager** (no SSH needed):
+1. Connect to your instance via **Session Manager**:
    ```bash
    aws ssm start-session --target <NAT_INSTANCE_ID>
    ```
-   *(If the SSM agent is not yet installed, connect temporarily via SSH with your key pair.)*
+   *(The agent is installed by `user_data`; wait a couple of minutes after launch if the session fails.)*
 2. Enable IPv4 forwarding in the Linux Kernel:
    ```bash
    echo "net.ipv4.ip_forward = 1" | sudo tee -a /etc/sysctl.conf
