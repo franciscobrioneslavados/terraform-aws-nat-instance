@@ -4,11 +4,13 @@ A Terraform module to deploy a **NAT Instance** in AWS VPC, configured to route 
 
 ## Features
 
-- EC2 NAT Instance with Amazon Linux 2 (or custom AMI)
+- EC2 NAT Instance with Amazon Linux 2, Amazon Linux 2023 or Ubuntu (or custom AMI)
 - Automatic iptables NAT configuration
-- Elastic IP association
-- Security Group with configurable SSH access
+- Security Group with configurable SSH access (disabled by default)
+- **Secure access via AWS Systems Manager (Session Manager) — no SSH required**
+- **IAM instance profile with `AmazonSSMManagedInstanceCore`**
 - Support for multiple Route Tables
+- Multi-architecture support (x86_64 and arm64/Graviton)
 - Terraform Registry compatible
 
 ## Architecture
@@ -102,7 +104,10 @@ module "nat_instance" {
 | owner_name | Owner name for tagging | `string` | - | yes |
 | instance_type | EC2 instance type | `string` | `t3.micro` | no |
 | ssh_allowed_cidrs | CIDR blocks for SSH access (empty disables) | `list(string)` | `[]` | no |
-| ami_id | Custom AMI ID (null = Amazon Linux 2) | `string` | `null` | no |
+| key_name | Existing EC2 key pair for SSH (optional) | `string` | `null` | no |
+| ami_id | Custom AMI ID (null = auto-detect) | `string` | `null` | no |
+| os_type | OS type: `amazon-linux-2`, `al2023` or `ubuntu` | `string` | `amazon-linux-2` | no |
+| cpu_architecture | `x86_64` or `arm64` (must match instance_type) | `string` | `x86_64` | no |
 | managed_by | ManagedBy tag value | `string` | `Terraform` | no |
 
 ## Outputs
@@ -111,16 +116,50 @@ module "nat_instance" {
 |------|-------------|
 | nat_instance_id | ID of the NAT Instance |
 | nat_instance_arn | ARN of the NAT Instance |
-| nat_instance_public_ip | Public IP (EIP) of the NAT Instance |
+| nat_instance_public_ip | Public IP of the NAT Instance (dynamic) |
 | nat_instance_private_ip | Private IP of the NAT Instance |
 | nat_network_interface_id | Primary network interface ID |
 | nat_security_group_id | Security Group ID |
+| ssm_connect_command | Ready-to-run SSM connection command |
+
+## Secure access without SSH: AWS Systems Manager
+
+The module attaches an **IAM instance profile** with `AmazonSSMManagedInstanceCore`, so you can connect to the instance **without opening port 22**. SSH is disabled by default (`ssh_allowed_cidrs = []`).
+
+### Local prerequisites
+
+- [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
+- [session-manager-plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html)
+- Credentials with permission to start SSM sessions on the instance
+
+### Connect (shell)
+
+```bash
+aws ssm start-session --target <NAT_INSTANCE_ID>
+```
+
+Use the `nat_instance_id` output, or copy the ready command from the `ssm_connect_command` output.
+
+### Run remote commands (non-interactive)
+
+```bash
+aws ssm send-command \
+  --instance-ids <NAT_INSTANCE_ID> \
+  --document-name "AWS-RunShellScript" \
+  --parameters 'commands=["sudo iptables -t nat -L -n -v"]'
+```
+
+### SSM notes
+
+- The agent opens an **outbound** connection to SSM endpoints; no inbound 443 is required (egress already allows it).
+- `amazon-ssm-agent` is installed/activated by `user_data` for all OS types.
 
 ## Testing / Validation
 
-1. Connect to the NAT Instance using your key pair:
+1. Connect to the NAT Instance via SSM (recommended) or SSH:
    ```bash
-   ssh -i your-key.pem ec2-user@<NAT_PUBLIC_IP>
+   # SSM (no SSH exposed)
+   aws ssm start-session --target <NAT_INSTANCE_ID>
    ```
 
 2. Verify IP forwarding:
@@ -141,11 +180,11 @@ module "nat_instance" {
 
 5. Test from a private instance:
    ```bash
-   # From NAT Instance, SSH to private instance
+   # From NAT Instance, connect to private instance
    ssh ec2-user@<PRIVATE_IP>
    
    # From private instance
-   curl -s https://ifconfig.me  # Should show NAT's EIP
+   curl -s https://ifconfig.me  # Should show the NAT's public IP
    ```
 
 ## AWS Console Deployment (Manual Step-by-Step)
@@ -178,17 +217,20 @@ If you need to deploy and configure this NAT Instance manually using the **AWS W
 3. Click **Actions** > **Networking** > **Change source/destination check**.
 4. Select **Stop** (which disables the check) and save.
 
-### 3. Allocate and Associate an Elastic IP (EIP)
-*An EIP ensures your NAT Instance maintains a persistent public IP.*
-1. In the left EC2 sidebar, go to **Elastic IPs** and click **Allocate Elastic IP address**. Click **Allocate**.
-2. Select the allocated EIP, click **Actions** > **Associate Elastic IP address**.
-3. Choose **Instance**, select your NAT Instance, and click **Associate**.
+### 3. (Optional) Attach an IAM role for SSM access
+*This is optional if you want SSH-free access. It lets you connect via AWS Systems Manager instead of opening port 22.*
+1. Go to **IAM** > **Roles** > **Create role**.
+2. Trusted entity: **AWS service** > **EC2**.
+3. Add the **AmazonSSMManagedInstanceCore** managed policy.
+4. Name it (e.g., `ssm-nat-instance`) and create it.
+5. Back in EC2, select the instance > **Actions** > **Security** > **Modify IAM role**, and attach the new role.
 
-### 4. Configure IP Forwarding & NAT Masquerading (via SSH)
-1. Connect to your instance via SSH:
+### 4. Configure IP Forwarding & NAT Masquerading
+1. Connect to your instance. Preferred method — **Session Manager** (no SSH needed):
    ```bash
-   ssh -i your-key.pem ec2-user@<NAT_PUBLIC_IP>
+   aws ssm start-session --target <NAT_INSTANCE_ID>
    ```
+   *(If the SSM agent is not yet installed, connect temporarily via SSH with your key pair.)*
 2. Enable IPv4 forwarding in the Linux Kernel:
    ```bash
    echo "net.ipv4.ip_forward = 1" | sudo tee -a /etc/sysctl.conf
@@ -220,7 +262,7 @@ If you need to deploy and configure this NAT Instance manually using the **AWS W
 ## Notes
 
 - The NAT Instance must have **source_dest_check = false** (handled automatically)
-- The EIP is associated to the ENI to avoid recreation
+- The public IP is **dynamic** and changes if the instance restarts; outbound traffic is unaffected because the route points to the instance ENI/private IP
 - Private subnets must use route **0.0.0.0/0** pointing to the NAT Instance
 - This module does not create the Internet Gateway or public Route Tables
 - For high availability, consider deploying NAT Instances in multiple AZs

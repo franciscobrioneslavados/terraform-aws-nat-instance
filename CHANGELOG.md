@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-08-01
+
+### Added
+- Secure access via AWS Systems Manager: new IAM role + instance profile with `AmazonSSMManagedInstanceCore` attached to the NAT Instance.
+- `amazon-ssm-agent` installed and activated in `user_data` for all supported OS types (AL2/al2023 via `yum`, Ubuntu via `snap`).
+- New output `ssm_connect_command` with a ready-to-run `aws ssm start-session` command.
+- README section documenting SSM connection and `aws ssm send-command`.
+
+### Removed
+- Elastic IP (`aws_eip`) and EIP association. The public IP is now dynamic; NAT routing is unaffected because the route points to the instance ENI/private IP.
+
+### Changed
+- `nat_instance_public_ip` output now returns the instance's dynamic public IP instead of the EIP.
+- README: SSH disabled by default (`ssh_allowed_cidrs = []`), SSM documented as the recommended access method.
+
 ## [1.4.0] - 2026-05-28
 
 ### Added

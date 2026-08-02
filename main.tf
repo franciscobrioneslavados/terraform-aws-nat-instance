@@ -136,11 +136,42 @@ resource "aws_security_group" "nat_instance" {
 
 
 
+# IAM role + instance profile para AWS Systems Manager (acceso sin exponer SSH)
+resource "aws_iam_role" "nat_instance_ssm" {
+  name = "ssm-${var.environment}-${var.project_name}"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = {
+        Service = "ec2.amazonaws.com"
+      }
+    }]
+  })
+
+  tags = merge(local.global_tags, {
+    Name = "ssm-${var.environment}-${var.project_name}"
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "nat_instance_ssm_core" {
+  role       = aws_iam_role.nat_instance_ssm.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_instance_profile" "nat_instance_ssm" {
+  name = "ssm-${var.environment}-${var.project_name}"
+  role = aws_iam_role.nat_instance_ssm.name
+}
+
 resource "aws_instance" "nat_instance" {
   ami                         = coalesce(var.ami_id, var.os_type == "ubuntu" ? one(data.aws_ami.ubuntu[*].id) : (var.os_type == "al2023" ? one(data.aws_ami.al2023[*].id) : one(data.aws_ami.amazon_linux_2[*].id)))
   instance_type               = var.instance_type
   subnet_id                   = var.public_subnet_ids[0]
   vpc_security_group_ids      = [aws_security_group.nat_instance.id]
+  iam_instance_profile        = aws_iam_instance_profile.nat_instance_ssm.name
   associate_public_ip_address = true
   source_dest_check           = false
   key_name                    = var.key_name
@@ -157,19 +188,6 @@ resource "aws_instance" "nat_instance" {
     Name = "ec2-${var.environment}-${var.project_name}"
   })
 
-}
-
-resource "aws_eip" "nat" {
-  domain = "vpc"
-
-  tags = merge(local.global_tags, {
-    Name = "${var.environment}-${var.project_name}-eip"
-  })
-}
-
-resource "aws_eip_association" "nat_eip" {
-  allocation_id        = aws_eip.nat.id
-  network_interface_id = aws_instance.nat_instance.primary_network_interface_id
 }
 
 resource "aws_route" "nat_instance" {

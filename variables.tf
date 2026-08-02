@@ -107,6 +107,11 @@ variable "user_data_al2" {
     systemctl start iptables
 
     yum install -y tcpdump curl wget
+
+    # Garantizar agente SSM activo (acceso sin SSH)
+    yum install -y amazon-ssm-agent
+    systemctl enable amazon-ssm-agent
+    systemctl start amazon-ssm-agent
     
     echo "NAT Instance configured successfully"
   EOT
@@ -137,6 +142,11 @@ variable "user_data_ubuntu" {
    
      # Guardar las reglas para que persistan tras reinicios
      netfilter-persistent save
+
+     # Instalar y activar agente SSM (acceso sin SSH)
+     snap install amazon-ssm-agent --classic
+     systemctl enable snap.amazon-ssm-agent.amazon-ssm-agent.service
+     systemctl start snap.amazon-ssm-agent.amazon-ssm-agent.service
    
      echo "NAT Instance (Ubuntu) configured successfully"
    EOT

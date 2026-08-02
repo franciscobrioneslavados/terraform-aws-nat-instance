@@ -31,5 +31,7 @@ module "nat_instance" {
   owner_name    = "Your Name"
   instance_type = "t3.micro"
 
-  ssh_allowed_cidrs = ["your-ip/32"]
+  # Access via AWS Systems Manager (recommended). SSH stays closed.
+  # Uncomment to allow SSH from your IP instead:
+  # ssh_allowed_cidrs = ["your-ip/32"]
 }
